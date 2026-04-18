@@ -15,40 +15,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Run a single test file | `npm test -- <path/to/test>` |
 | Watch tests in CI mode | `npm run test:watch` |
 
-## High‑Level Architecture
+## High-Level Architecture
 
-The project is a **React + TypeScript** single‑page application bootstrapped with Vite.
+The project is a **React + TypeScript** baby sleep and feeding tracker PWA, bootstrapped with Vite.
 
-* **`src/`** – All source code lives here. The main entry point is `src/main.tsx`, which mounts the React app into the `<div id="root">` element defined in `public/index.html`.
-* **Components** – Functional components are organised by feature. Look for folders like `src/components/` and `src/pages/`. Each component file follows the `.tsx` convention and uses TypeScript for type safety.
-* **Routing** – The app uses `react-router-dom` (check `src/routes.tsx`) to define the navigation graph. Routes are lazy‑loaded via `React.lazy` and wrapped in a `Suspense` fallback.
-* **State Management** – The project currently relies on React Context for shared state. Look at `src/contexts/` for provider implementations.
-* **Styling** – Vite serves static assets from `public/` and CSS modules are used in component styles (`*.module.css`).
-* **Build** – Vite’s default configuration is used. The `vite.config.ts` file can be extended for custom asset handling or environment variables.
+* **`src/`** – All source code lives here. Main entry point: `src/main.tsx`.
+* **Components** – Located in `src/components/`:
+  - `ActivityGanttChart.tsx` – Visualizes today's sleep/feed activity on a timeline
+  - `RecentActivityList.tsx` – Displays recent sleep and feed events
+  - `EditLogModal.tsx` – Modal for editing/deleting logs
+* **State Management** – React hooks (`useState`, `useEffect`) handle all state. No Context providers currently used.
+* **Styling** – Tailwind CSS via `@tailwindcss/vite` plugin + `src/index.css`. Uses Lucide React icons.
+* **Persistence/Backend** – Supabase (PostgreSQL backend with auth, RLS for permissions). See `src/lib/supabase.ts`.
+* **PWA** – Service worker registration via `virtual:pwa-register` in `src/main.tsx`, offline support configured in `vite.config.ts`.
+
+### Baby Tracker Features
+
+- **Sleep Tracking** – Toggle sleep start/end, track duration, age-appropriate wake window recommendations
+- **Feeding Tracker** – Start/stop feeds with left/right boob side selection
+- **Activity Gantt Chart** – Visual timeline of today's sleep and feed sessions
+- **Recent Activity** – List of last 10 sleep/feed events with timestamps and durations
+- **Day Summary (Stats Tab)** – Sleep sessions count, longest session, feed sessions, total feeding time
+
+## Tech Stack
+
+- React 18+
+- TypeScript
+- Tailwind CSS
+- date-fns (date utility)
+- Supabase (auth + backend)
+- VitePWA (PWA support)
+- Lucide React (icons)
 
 ## Important Configuration Files
 
-* **`vite.config.ts`** – Vite entry point, defines plugins and build options.
-* **`.eslintrc.js`** – ESLint configuration. It includes TypeScript support and React rules.
-* **`.prettierrc.json`** – Prettier formatting options.
+* **`vite.config.ts`** – Vite plugins, PWA config with code splitting for recharts/react-is
+* **`.eslintrc.js`** – ESLint configuration with TypeScript/React rules
+* **`.prettierrc.json`** – Prettier formatting options
+* **`src/lib/supabase.ts`** – Supabase client setup (check `.env` for credentials)
+* **`src/utils/sleepRecommendations.ts`** – Age-based wake window logic
 
-## Helpful Scripts (see `package.json`)
+## Data Models (from SUPABASE_SCHEMA.sql)
 
-* **`npm run dev`** – Starts Vite with hot‑module replacement.
-* **`npm run build`** – Builds a production‑ready bundle in the `dist/` directory.
-* **`npm run lint`** – Runs ESLint across the codebase.
-* **`npm run format`** – Formats files with Prettier.
-* **`npm test`** – Executes Jest tests.
+- `babies` – Baby info (name, birth_date, user_id)
+- `baby_members` – User permissions for babies (owner/member roles)
+- `sleep_logs` – Sleep sessions (start_time, end_time, baby_id)
+- `feed_logs` – Feeding sessions (start_time, end_time, baby_id, boob_side)
 
-## Running Tests Locally
+## Build Output
 
-```bash
-# Run all tests once
-npm test
-
-# Watch mode (useful during development)
-npm run test:watch
-
-# Run a specific test file
-npm test -- src/__tests__/MyComponent.test.tsx
-```
+Production bundle is in `dist/`. Serve with: `npx serve dist -p <port>` or deploy to GitHub Pages.
