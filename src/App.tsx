@@ -1,22 +1,32 @@
 import { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { Moon, Sun, History, Settings, Plus, Square, Baby, X, BarChart2 } from 'lucide-react';
-import { format, formatDistanceToNow, differenceInDays, startOfDay, endOfDay, differenceInMinutes } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { getNextSleepRecommendation } from './utils/sleepRecommendations';
 import ActivityGanttChart from './components/ActivityGanttChart';
 import RecentActivityList, { type RecentActivityItem } from './components/RecentActivityList';
 import EditLogModal from './components/EditLogModal';
 import SleepStatusCard from './components/SleepStatusCard';
 import FeedTrackerCard from './components/FeedTrackerCard';
+import { useBabyData } from './hooks/useBabyData';
+import { useTimelineData } from './hooks/useTimelineData';
 
 function App() {
-  const [session, setSession] = useState<any>(null);
-  const [baby, setBaby] = useState<any>(null);
-  const [sleepLogs, setSleepLogs] = useState<any[]>([]);
-  const [feedLogs, setFeedLogs] = useState<any[]>([]);
-  const [isSleeping, setIsSleeping] = useState(false);
-  const [currentSleepLog, setCurrentSleepLog] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const {
+    session,
+    baby,
+    sleepLogs,
+    feedLogs,
+    isSleeping,
+    currentSleepLog,
+    isFeeding,
+    currentFeedLog,
+    feedTimerActive,
+    loading,
+    refreshBabyAndLogs,
+    refreshSleepLogs,
+    refreshFeedLogs,
+  } = useBabyData();
   const [now, setNow] = useState(new Date());
   const [editingLog, setEditingLog] = useState<any>(null);
   const [editingLogType, setEditingLogType] = useState<'sleep' | 'feed' | null>(null);
@@ -27,10 +37,7 @@ function App() {
   const [isEditingBaby, setIsEditingBaby] = useState(false);
   const [editBabyName, setEditBabyName] = useState('');
   const [editBabyBirthDate, setEditBabyBirthDate] = useState('');
-  const [isFeeding, setIsFeeding] = useState(false);
-  const [currentFeedLog, setCurrentFeedLog] = useState<any>(null);
   const [selectedBoob, setSelectedBoob] = useState<string | null>(null);
-  const [feedTimerActive, setFeedTimerActive] = useState(false);
 
 
   const updateBaby = async (e: React.FormEvent) => {
@@ -47,11 +54,8 @@ function App() {
       .select();
 
     if (data && data.length > 0) {
-      setCurrentFeedLog(data[0]);
-      setIsFeeding(true);
-      setFeedTimerActive(true);
       setSelectedBoob(null); // Reset selection after starting
-      await fetchFeedLogs(baby.id);
+      await refreshFeedLogs(baby.id);
     }
   };
 
@@ -64,32 +68,7 @@ function App() {
       .eq('id', currentFeedLog.id);
 
     if (!error) {
-      setIsFeeding(false);
-      setFeedTimerActive(false);
-      setCurrentFeedLog(null);
-      await fetchFeedLogs(baby.id);
-    }
-  };
-
-  const fetchFeedLogs = async (babyId: string) => {
-    const { data: logs } = await supabase
-      .from('feed_logs')
-      .select('*')
-      .eq('baby_id', babyId)
-      .order('start_time', { ascending: false });
-
-    if (logs) {
-      setFeedLogs(logs);
-      const activeLog = logs.find((log) => !log.end_time);
-      if (activeLog) {
-        setIsFeeding(true);
-        setFeedTimerActive(true);
-        setCurrentFeedLog(activeLog);
-      } else {
-        setIsFeeding(false);
-        setFeedTimerActive(false);
-        setCurrentFeedLog(null);
-      }
+      await refreshFeedLogs(baby.id);
     }
   };
 
@@ -109,14 +88,14 @@ function App() {
     if (!error) {
       setEditingLog(null);
       setEditingLogType(null);
-      if (baby) await fetchFeedLogs(baby.id);
+      if (baby) await refreshFeedLogs(baby.id);
     }
   };
 
   const deleteFeedLog = async (id: string) => {
     if (!confirm('Are you sure you want to delete this feed log?')) return;
     const { error } = await supabase.from('feed_logs').delete().eq('id', id);
-    if (!error && baby) await fetchFeedLogs(baby.id);
+    if (!error && baby) await refreshFeedLogs(baby.id);
   };
 
 
@@ -135,94 +114,25 @@ function App() {
       if (!error) {
         setEditingLog(null);
         setEditingLogType(null);
-        if (baby) fetchLogs(baby.id);
+        if (baby) refreshSleepLogs(baby.id);
       }
   };
 
     const deleteLog = async (id: string) => {
       if (!confirm('Are you sure you want to delete this sleep log?')) return;
       const { error } = await supabase.from('sleep_logs').delete().eq('id', id);
-      if (!error && baby) fetchLogs(baby.id);
+      if (!error && baby) refreshSleepLogs(baby.id);
     };
-
-    const getTodaySleepSessions = () => {
-      const todayStart = startOfDay(now);
-      const todayEnd = endOfDay(now);
-      const sessions = sleepLogs
-        .map((log) => {
-          const rawStart = new Date(log.start_time);
-          const rawEnd = log.end_time ? new Date(log.end_time) : now;
-          if (rawEnd < todayStart || rawStart > todayEnd) return null;
-
-          const start = rawStart < todayStart ? todayStart : rawStart;
-          const end = rawEnd > todayEnd ? todayEnd : rawEnd;
-          const offset = Math.max(0, differenceInMinutes(start, todayStart));
-          const duration = Math.max(0, differenceInMinutes(end, start));
-
-          return {
-            id: log.id,
-            start,
-            end,
-            offset,
-            duration,
-            label: `${format(start, 'h:mm a')} - ${format(end, 'h:mm a')}`,
-          };
-        })
-        .filter((session): session is NonNullable<typeof session> => Boolean(session))
-        .filter((session) => session.duration > 0)
-        .sort((a, b) => a.start.getTime() - b.start.getTime());
-
-      return sessions;
-    };
-
-    const todaySleepSessions = getTodaySleepSessions();
-    const totalMinutesToday = todaySleepSessions.reduce((acc, curr) => acc + curr.duration, 0);
-    const totalHoursToday = (totalMinutesToday / 60).toFixed(1);
-    const getTodayFeedSessions = () => {
-      const todayStart = startOfDay(now);
-      const todayEnd = endOfDay(now);
-
-      return feedLogs
-        .map((log) => {
-          const rawStart = new Date(log.start_time);
-          const rawEnd = log.end_time ? new Date(log.end_time) : now;
-          if (rawEnd < todayStart || rawStart > todayEnd) return null;
-
-          const start = rawStart < todayStart ? todayStart : rawStart;
-          const end = rawEnd > todayEnd ? todayEnd : rawEnd;
-          const offset = Math.max(0, differenceInMinutes(start, todayStart));
-          const duration = Math.max(0, differenceInMinutes(end, start));
-
-          return {
-            id: log.id,
-            start,
-            end,
-            offset,
-            duration,
-            boobSide: log.boob_side === 'right' ? 'right' : 'left',
-            label: `${format(start, 'h:mm a')} - ${format(end, 'h:mm a')}`,
-          };
-        })
-        .filter((session): session is NonNullable<typeof session> => Boolean(session))
-        .filter((session) => session.duration > 0)
-        .sort((a, b) => a.start.getTime() - b.start.getTime());
-    };
-    const todayFeedSessions = getTodayFeedSessions();
-    const todayTimelineData = [
-      ...todaySleepSessions.map((session, index) => ({
-        ...session,
-        activityType: 'sleep' as const,
-        sessionName: `Sleep ${index + 1}`,
-      })),
-      ...todayFeedSessions.map((session, index) => ({
-        ...session,
-        activityType: 'feed' as const,
-        sessionName: `Feed ${index + 1}`,
-      })),
-    ].sort((a, b) => a.start.getTime() - b.start.getTime());
-    const totalFeedMinutesToday = todayFeedSessions.reduce((acc, log) => {
-      return acc + log.duration;
-    }, 0);
+    const {
+      todaySleepSessions,
+      todayFeedSessions,
+      todayTimelineData,
+      totalHoursToday,
+      totalFeedMinutesToday,
+      recentActivity,
+      lastWakeTime,
+      lastWakeAgoText,
+    } = useTimelineData(sleepLogs, feedLogs, now);
 
     useEffect(() => {
       let interval: any;
@@ -248,66 +158,6 @@ function App() {
       return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
     };
 
-    useEffect(() => {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session);
-        if (session) fetchBabyAndLogs();
-        else setLoading(false);
-      });
-
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setSession(session);
-        if (session) fetchBabyAndLogs();
-        else {
-          setBaby(null);
-          setSleepLogs([]);
-          setFeedLogs([]);
-          setIsFeeding(false);
-          setCurrentFeedLog(null);
-          setFeedTimerActive(false);
-          setLoading(false);
-        }
-      });
-
-      return () => subscription.unsubscribe();
-    }, []);
-
-    const fetchBabyAndLogs = async () => {
-      setLoading(true);
-      // Fetch first accessible baby (owner or member, enforced by RLS)
-      const { data: babies } = await supabase
-        .from('babies')
-        .select('*')
-        .order('created_at', { ascending: true })
-        .limit(1);
-
-      if (babies && babies.length > 0) {
-        setBaby(babies[0]);
-        await Promise.all([fetchLogs(babies[0].id), fetchFeedLogs(babies[0].id)]);
-      }
-      setLoading(false);
-    };
-
-    const fetchLogs = async (babyId: string) => {
-      const { data: logs } = await supabase
-        .from('sleep_logs')
-        .select('*')
-        .eq('baby_id', babyId)
-        .order('start_time', { ascending: false });
-
-      if (logs) {
-        setSleepLogs(logs);
-        const activeLog = logs.find(log => !log.end_time);
-        if (activeLog) {
-          setIsSleeping(true);
-          setCurrentSleepLog(activeLog);
-        } else {
-          setIsSleeping(false);
-          setCurrentSleepLog(null);
-        }
-      }
-    };
-
     const toggleSleep = async () => {
       if (!baby) return;
 
@@ -319,9 +169,7 @@ function App() {
           .eq('id', currentSleepLog.id);
 
         if (!error) {
-          setIsSleeping(false);
-          setCurrentSleepLog(null);
-          fetchLogs(baby.id);
+          await refreshSleepLogs(baby.id);
         }
       } else {
         // Start sleep
@@ -331,29 +179,15 @@ function App() {
           .select();
 
         if (data && data.length > 0) {
-          setIsSleeping(true);
-          setCurrentSleepLog(data[0]);
-          fetchLogs(baby.id);
+          await refreshSleepLogs(baby.id);
         }
       }
     };
 
-    const lastWakeTime = sleepLogs.find(log => log.end_time)?.end_time;
     const recommendation = baby && lastWakeTime
       ? getNextSleepRecommendation(new Date(baby.birth_date), new Date(lastWakeTime))
       : null;
-    const lastWakeAgoText = lastWakeTime ? `${formatDistanceToNow(new Date(lastWakeTime))} ago` : 'No data';
     const authRedirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
-    const recentActivity = [
-      ...sleepLogs
-        .filter((log) => log.end_time)
-        .map((log) => ({ type: 'sleep' as const, ...log })),
-      ...feedLogs
-        .filter((log) => log.end_time)
-        .map((log) => ({ type: 'feed' as const, ...log })),
-    ]
-      .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
-      .slice(0, 10);
 
     const handleEditRecentActivity = (log: RecentActivityItem) => {
       setEditingLog(log);
@@ -489,7 +323,7 @@ function App() {
                   alert(`Baby created, but membership setup failed: ${memberError.message}`);
                 }
 
-                fetchBabyAndLogs();
+                refreshBabyAndLogs();
               }
             }}>
               <div>
