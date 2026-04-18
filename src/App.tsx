@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
-import { Moon, Sun, History, Settings, Plus, Square, Baby, Edit2, X, BarChart2 } from 'lucide-react';
+import { Moon, Sun, History, Settings, Plus, Square, Baby, X, BarChart2 } from 'lucide-react';
 import { format, formatDistanceToNow, differenceInDays, startOfDay, endOfDay, differenceInMinutes } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { getNextSleepRecommendation } from './utils/sleepRecommendations';
+import ActivityGanttChart from './components/ActivityGanttChart';
+import RecentActivityList, { type RecentActivityItem } from './components/RecentActivityList';
+import EditLogModal from './components/EditLogModal';
+import SleepStatusCard from './components/SleepStatusCard';
+import FeedTrackerCard from './components/FeedTrackerCard';
 
 function App() {
   const [session, setSession] = useState<any>(null);
@@ -338,6 +342,7 @@ function App() {
     const recommendation = baby && lastWakeTime
       ? getNextSleepRecommendation(new Date(baby.birth_date), new Date(lastWakeTime))
       : null;
+    const lastWakeAgoText = lastWakeTime ? `${formatDistanceToNow(new Date(lastWakeTime))} ago` : 'No data';
     const authRedirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
     const recentActivity = [
       ...sleepLogs
@@ -349,6 +354,27 @@ function App() {
     ]
       .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
       .slice(0, 10);
+
+    const handleEditRecentActivity = (log: RecentActivityItem) => {
+      setEditingLog(log);
+      setEditingLogType(log.type);
+      setEditStartTime(format(new Date(log.start_time), "yyyy-MM-dd'T'HH:mm:ss"));
+      setEditEndTime(log.end_time ? format(new Date(log.end_time), "yyyy-MM-dd'T'HH:mm:ss") : '');
+      if (log.type === 'feed') {
+        setEditBoobSide(log.boob_side === 'right' ? 'right' : 'left');
+      }
+    };
+
+    const handleDeleteEditingLog = () => {
+      if (!editingLog) return;
+      if (editingLogType === 'feed') {
+        deleteFeedLog(editingLog.id);
+      } else {
+        deleteLog(editingLog.id);
+      }
+      setEditingLog(null);
+      setEditingLogType(null);
+    };
 
     if (loading) {
       return (
@@ -529,240 +555,50 @@ function App() {
                 </div>
               )}
 
-              {/* Current Status Card */}
-              <div className={`p-8 rounded-[2.5rem] shadow-xl text-center transition-colors duration-500 ${isSleeping ? 'bg-indigo-600 text-white' : 'bg-white text-gray-800'}`}>
-                {isSleeping ? (
-                  <>
-                    <Moon size={48} className="mx-auto mb-4 animate-pulse" />
-                    <h2 className="text-2xl font-bold mb-2">Shhh! {baby.name} is sleeping</h2>
-                    <div className="bg-white/10 py-4 px-6 rounded-2xl mb-8 inline-block">
-                      <p className="text-4xl font-mono font-bold tracking-wider mb-1">
-                        {formatDuration(currentSleepLog.start_time)}
-                      </p>
-                      <p className="text-xs opacity-70 uppercase tracking-widest">Elapsed Time</p>
-                    </div>
-                    <br />
-                    <button
-                      onClick={() => {
-                        setEditingLog(currentSleepLog);
-                        setEditingLogType('sleep');
-                        setEditStartTime(format(new Date(currentSleepLog.start_time), "yyyy-MM-dd'T'HH:mm:ss"));
-                        setEditEndTime('');
-                      }}
-                      className="mb-4 bg-white/15 text-white px-6 py-2 rounded-xl font-semibold hover:bg-white/25 transition-colors"
-                    >
-                      Edit Start Time
-                    </button>
-                    <br />
-                    <button
-                      onClick={toggleSleep}
-                      className="bg-white text-indigo-600 px-10 py-4 rounded-2xl font-bold shadow-lg hover:bg-gray-100 transition-transform active:scale-95"
-                    >
-                      Wake Up
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <Sun size={48} className="mx-auto mb-4 text-amber-400" />
-                    <h2 className="text-2xl font-bold mb-2">{baby.name} is awake</h2>
-                    <p className="text-gray-400 mb-8">Last woke up {lastWakeTime ? formatDistanceToNow(new Date(lastWakeTime)) + ' ago' : 'No data'}</p>
-                    <button
-                      onClick={toggleSleep}
-                      className="bg-pink-500 text-white px-10 py-4 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition-transform active:scale-95"
-                    >
-                      Put to Sleep
-                    </button>
-                  </>
-                )}
-              </div>
+              <SleepStatusCard
+                babyName={baby.name}
+                isSleeping={isSleeping}
+                currentSleepStartTime={currentSleepLog?.start_time}
+                lastWakeAgoText={lastWakeAgoText}
+                formatDuration={formatDuration}
+                onEditStartTime={() => {
+                  if (!currentSleepLog) return;
+                  setEditingLog(currentSleepLog);
+                  setEditingLogType('sleep');
+                  setEditStartTime(format(new Date(currentSleepLog.start_time), "yyyy-MM-dd'T'HH:mm:ss"));
+                  setEditEndTime('');
+                }}
+                onToggleSleep={toggleSleep}
+              />
 
-              {/* Feed Tracker */}
-              <div className={`p-6 rounded-[2.5rem] shadow-xl transition-colors duration-500 ${isFeeding ? 'bg-emerald-600 text-white' : 'bg-white text-gray-800'}`}>
-                <h3 className="text-lg font-bold mb-4">Feeding Tracker</h3>
-                {isFeeding && currentFeedLog ? (
-                  <>
-                    <p className="text-sm opacity-90 mb-2">Currently feeding ({currentFeedLog.boob_side})</p>
-                    <p className="text-xs opacity-80 mb-4">{feedTimerActive ? 'Timer running' : 'Timer paused'}</p>
-                    <p className="text-4xl font-mono font-bold tracking-wider mb-6">
-                      {formatDuration(currentFeedLog.start_time)}
-                    </p>
-                    <button
-                      onClick={() => {
-                        setEditingLog(currentFeedLog);
-                        setEditingLogType('feed');
-                        setEditStartTime(format(new Date(currentFeedLog.start_time), "yyyy-MM-dd'T'HH:mm:ss"));
-                        setEditEndTime('');
-                        setEditBoobSide(currentFeedLog.boob_side === 'right' ? 'right' : 'left');
-                      }}
-                      className="w-full mb-3 bg-white/20 text-white px-6 py-3 rounded-2xl font-semibold hover:bg-white/30 transition-colors"
-                    >
-                      Edit Start Time
-                    </button>
-                    <button
-                      onClick={stopFeed}
-                      className="w-full bg-white text-emerald-700 px-6 py-4 rounded-2xl font-bold shadow-lg hover:bg-emerald-50 transition-transform active:scale-95"
-                    >
-                      Stop Feed
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm text-gray-500 mb-4">Choose side and start a feeding session.</p>
-                    <div className="grid grid-cols-2 gap-3 mb-4">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedBoob('left')}
-                        className={`py-3 rounded-2xl font-semibold border transition-colors ${selectedBoob === 'left' ? 'bg-emerald-100 border-emerald-400 text-emerald-800' : 'bg-white border-gray-200 text-gray-500'}`}
-                      >
-                        Left
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedBoob('right')}
-                        className={`py-3 rounded-2xl font-semibold border transition-colors ${selectedBoob === 'right' ? 'bg-emerald-100 border-emerald-400 text-emerald-800' : 'bg-white border-gray-200 text-gray-500'}`}
-                      >
-                        Right
-                      </button>
-                    </div>
-                    <button
-                      onClick={startFeed}
-                      disabled={!selectedBoob}
-                      className="w-full bg-emerald-500 disabled:bg-emerald-200 disabled:cursor-not-allowed text-white px-6 py-4 rounded-2xl font-bold shadow-lg hover:bg-emerald-600 transition-transform active:scale-95"
-                    >
-                      Start Feed
-                    </button>
-                  </>
-                )}
-              </div>
-
-
-
-
-
-              {/* Combined History Section */}
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-bold flex items-center gap-2">
-                    <History size={20} className="text-pink-500" /> Recent Activity
-                  </h3>
-                </div>
-                <div className="space-y-3">
-                  {recentActivity.map((log) => (
-                    <div
-                      key={`${log.type}-${log.id}`}
-                      className={`bg-white p-4 rounded-2xl flex justify-between items-center border ${log.type === 'sleep' ? 'border-pink-100' : 'border-emerald-100'}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${log.type === 'sleep' ? 'bg-pink-50' : 'bg-emerald-50'}`}>
-                          {log.type === 'sleep' ? (
-                            <Moon size={16} className="text-pink-400" />
-                          ) : (
-                            <Sun size={16} className="text-emerald-500" />
-                          )}
-                        </div>
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold">{format(new Date(log.start_time), 'MMM d, h:mm:ss a')}</p>
-                            <span className="text-gray-300">→</span>
-                            <p className="text-sm font-semibold text-gray-600">{format(new Date(log.end_time), 'h:mm:ss a')}</p>
-                          </div>
-                          <p className="text-xs text-gray-400 font-medium">
-                            <span className={`font-semibold mr-2 ${log.type === 'sleep' ? 'text-pink-500' : 'text-emerald-600'}`}>
-                              {log.type === 'sleep' ? 'Sleep' : `Feed (${log.boob_side})`}
-                            </span>
-                            Duration: <span className={`font-mono ${log.type === 'sleep' ? 'text-pink-500' : 'text-emerald-600'}`}>{formatDuration(log.start_time, log.end_time)}</span>
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setEditingLog(log);
-                          setEditingLogType(log.type);
-                          setEditStartTime(format(new Date(log.start_time), "yyyy-MM-dd'T'HH:mm:ss"));
-                          setEditEndTime(log.end_time ? format(new Date(log.end_time), "yyyy-MM-dd'T'HH:mm:ss") : '');
-                          if (log.type === 'feed') {
-                            setEditBoobSide(log.boob_side === 'right' ? 'right' : 'left');
-                          }
-                        }}
-                        className={`p-2 text-gray-400 transition-colors ${log.type === 'sleep' ? 'hover:text-pink-500' : 'hover:text-emerald-500'}`}
-                      >
-                        <Edit2 size={18} />
-                      </button>
-                    </div>
-                  ))}
-                  {recentActivity.length === 0 && (
-                    <p className="text-center text-gray-400 py-10">No activity yet. Start tracking above!</p>
-                  )}
-                </div>
-              </div>
+              <FeedTrackerCard
+                isFeeding={isFeeding}
+                currentFeedStartTime={currentFeedLog?.start_time}
+                currentFeedBoobSide={currentFeedLog?.boob_side}
+                feedTimerActive={feedTimerActive}
+                selectedBoob={selectedBoob}
+                formatDuration={formatDuration}
+                onSelectBoob={setSelectedBoob}
+                onStartFeed={startFeed}
+                onStopFeed={stopFeed}
+                onEditStartTime={() => {
+                  if (!currentFeedLog) return;
+                  setEditingLog(currentFeedLog);
+                  setEditingLogType('feed');
+                  setEditStartTime(format(new Date(currentFeedLog.start_time), "yyyy-MM-dd'T'HH:mm:ss"));
+                  setEditEndTime('');
+                  setEditBoobSide(currentFeedLog.boob_side === 'right' ? 'right' : 'left');
+                }}
+              />
+              <RecentActivityList
+                recentActivity={recentActivity}
+                formatDuration={formatDuration}
+                onEdit={handleEditRecentActivity}
+              />
             </>
           ) : (
             <div className="space-y-6">
-              <div className="bg-white p-6 rounded-[2.5rem] shadow-xl text-center">
-                <h2 className="text-2xl font-bold text-gray-800 mb-2">Today's Sleep</h2>
-                <div className="flex items-center justify-center gap-4 mb-6">
-                  <div className="bg-pink-50 px-6 py-3 rounded-2xl">
-                    <p className="text-3xl font-bold text-pink-500">{totalHoursToday}h</p>
-                    <p className="text-xs text-pink-400 uppercase font-semibold">Total Slept</p>
-                  </div>
-                </div>
-
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart layout="vertical" data={todayTimelineData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f3f4f6" />
-                      <XAxis
-                        type="number"
-                        fontSize={10}
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: '#9ca3af' }}
-                        domain={[0, 1440]}
-                        ticks={[0, 360, 720, 1080, 1440]}
-                        tickFormatter={(value: number) => {
-                          const hour = Math.floor(value / 60);
-                          return `${hour.toString().padStart(2, '0')}:00`;
-                        }}
-                      />
-                      <YAxis
-                        type="category"
-                        dataKey="sessionName"
-                        fontSize={10}
-                        tickLine={false}
-                        axisLine={false}
-                        tick={{ fill: '#9ca3af' }}
-                        width={60}
-                      />
-                      <Tooltip
-                        cursor={{ fill: '#fdf2f8' }}
-                        contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                        labelFormatter={(_label, payload) => {
-                          const row = payload?.[0]?.payload;
-                          return row?.label ? `Session: ${row.label}` : 'Session';
-                        }}
-                      />
-                      <Bar dataKey="offset" stackId="activity-gantt" fill="transparent" />
-                      <Bar dataKey="duration" stackId="activity-gantt" radius={[0, 6, 6, 0]}>
-                        {todayTimelineData.map((entry) => (
-                          <Cell
-                            key={`${entry.activityType}-${entry.id}`}
-                            fill={entry.activityType === 'sleep' ? '#ec4899' : '#10b981'}
-                          />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex items-center justify-center gap-4 mt-4 text-xs text-gray-500">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-pink-500"></span> Sleep
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Feed
-                  </span>
-                </div>
-                <p className="text-xs text-gray-400 mt-2">Gantt timeline of today&apos;s sleep and feed sessions.</p>
-              </div>
+              <ActivityGanttChart totalHoursToday={totalHoursToday} timelineData={todayTimelineData} />
 
               <div className="bg-indigo-50 p-6 rounded-[2.5rem] border border-indigo-100">
                 <h3 className="text-indigo-900 font-bold mb-4 flex items-center gap-2">
@@ -812,98 +648,22 @@ function App() {
           </button>
         </nav>
 
-        {/* Edit Modal */}
-        {editingLog && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-            <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">
-                  {editingLogType === 'feed' ? 'Edit Feed Log' : 'Edit Sleep Log'}
-                </h2>
-                <button
-                  onClick={() => {
-                    setEditingLog(null);
-                    setEditingLogType(null);
-                  }}
-                  className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors"
-                >
-                  <X size={24} />
-                </button>
-              </div>
-
-              <form onSubmit={editingLogType === 'feed' ? updateFeedLog : updateLog} className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Start Time</label>
-                  <input
-                    type="datetime-local"
-                    step="1"
-                    value={editStartTime}
-                    onChange={(e) => setEditStartTime(e.target.value)}
-                    className="w-full p-4 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-pink-300 outline-none bg-pink-50/30"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">End Time</label>
-                  <input
-                    type="datetime-local"
-                    step="1"
-                    value={editEndTime}
-                    onChange={(e) => setEditEndTime(e.target.value)}
-                    className="w-full p-4 border border-gray-100 rounded-2xl focus:ring-2 focus:ring-pink-300 outline-none bg-pink-50/30"
-                    placeholder="Still sleeping..."
-                  />
-                </div>
-
-                {editingLogType === 'feed' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Side</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setEditBoobSide('left')}
-                        className={`py-3 rounded-2xl font-semibold border transition-colors ${editBoobSide === 'left' ? 'bg-emerald-100 border-emerald-400 text-emerald-800' : 'bg-white border-gray-200 text-gray-500'}`}
-                      >
-                        Left
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditBoobSide('right')}
-                        className={`py-3 rounded-2xl font-semibold border transition-colors ${editBoobSide === 'right' ? 'bg-emerald-100 border-emerald-400 text-emerald-800' : 'bg-white border-gray-200 text-gray-500'}`}
-                      >
-                        Right
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="pt-4 flex flex-col gap-3">
-                  <button
-                    type="submit"
-                    className="w-full bg-pink-500 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition-colors"
-                  >
-                    Save Changes
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (editingLogType === 'feed') {
-                        deleteFeedLog(editingLog.id);
-                      } else {
-                        deleteLog(editingLog.id);
-                      }
-                      setEditingLog(null);
-                      setEditingLogType(null);
-                    }}
-                    className="w-full text-red-500 py-4 font-semibold hover:bg-red-50 rounded-2xl transition-colors"
-                  >
-                    Delete Log
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+        <EditLogModal
+          isOpen={Boolean(editingLog)}
+          editingLogType={editingLogType}
+          editStartTime={editStartTime}
+          editEndTime={editEndTime}
+          editBoobSide={editBoobSide}
+          onClose={() => {
+            setEditingLog(null);
+            setEditingLogType(null);
+          }}
+          onSubmit={editingLogType === 'feed' ? updateFeedLog : updateLog}
+          onDelete={handleDeleteEditingLog}
+          onEditStartTimeChange={setEditStartTime}
+          onEditEndTimeChange={setEditEndTime}
+          onEditBoobSideChange={setEditBoobSide}
+        />
 
         {/* Baby Settings Modal */}
         {isEditingBaby && (
