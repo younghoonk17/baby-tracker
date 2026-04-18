@@ -5,6 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: '/baby-tracker/',
   plugins: [
     react(),
     tailwindcss(),
@@ -12,10 +13,15 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
+        id: '/baby-tracker/',
         name: 'Baby Sleep Tracker',
         short_name: 'BabySleep',
         description: 'Track your baby\'s sleep and get recommendations',
+        start_url: '/baby-tracker/',
+        scope: '/baby-tracker/',
         theme_color: '#ffffff',
+        background_color: '#ffffff',
+        display: 'standalone',
         icons: [
           {
             src: 'favicon.svg',
