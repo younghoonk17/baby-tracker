@@ -247,13 +247,13 @@ function App() {
     useEffect(() => {
       supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
-        if (session) fetchBabyAndLogs(session.user.id);
+        if (session) fetchBabyAndLogs();
         else setLoading(false);
       });
 
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         setSession(session);
-        if (session) fetchBabyAndLogs(session.user.id);
+        if (session) fetchBabyAndLogs();
         else {
           setBaby(null);
           setSleepLogs([]);
@@ -268,13 +268,13 @@ function App() {
       return () => subscription.unsubscribe();
     }, []);
 
-    const fetchBabyAndLogs = async (userId: string) => {
+    const fetchBabyAndLogs = async () => {
       setLoading(true);
-      // Fetch first baby
+      // Fetch first accessible baby (owner or member, enforced by RLS)
       const { data: babies } = await supabase
         .from('babies')
         .select('*')
-        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
         .limit(1);
 
       if (babies && babies.length > 0) {
@@ -444,7 +444,7 @@ function App() {
                 birth_date: birthDate,
                 user_id: session.user.id
               }]);
-              if (!error) fetchBabyAndLogs(session.user.id);
+              if (!error) fetchBabyAndLogs();
             }}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
