@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase, isSupabaseConfigured } from './lib/supabase';
 import { Moon, Sun, History, Settings, Plus, Square, Baby, Edit2, X, BarChart2 } from 'lucide-react';
 import { format, formatDistanceToNow, differenceInDays, startOfDay, endOfDay, differenceInMinutes } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -355,6 +355,19 @@ function App() {
           <div className="animate-pulse flex flex-col items-center">
             <Baby size={64} className="mb-4" />
             <p className="font-semibold">Loading Baby Tracker...</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (!isSupabaseConfigured) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-pink-50 p-6 text-center">
+          <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full">
+            <Baby size={64} className="text-pink-400 mx-auto mb-4" />
+            <h1 className="text-2xl font-bold text-gray-800 mb-3">Supabase Not Configured</h1>
+            <p className="text-gray-600 mb-2">Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.</p>
+            <p className="text-gray-500 text-sm">For GitHub Pages, add these as repository Action secrets too.</p>
           </div>
         </div>
       );

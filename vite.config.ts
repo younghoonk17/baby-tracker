@@ -4,8 +4,8 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
-export default defineConfig({
-  base: '/baby-tracker/',
+export default defineConfig(({ command }) => ({
+  base: command === 'serve' ? '/' : '/baby-tracker/',
   plugins: [
     react(),
     tailwindcss(),
@@ -43,4 +43,4 @@ export default defineConfig({
       },
     },
   },
-})
+}))
