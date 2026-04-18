@@ -412,7 +412,12 @@ function App() {
             </div>
 
             <button
-              onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })}
+              onClick={() => supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: {
+                  redirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
+                },
+              })}
               className="w-full bg-white border border-gray-200 text-gray-700 py-4 rounded-2xl font-bold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
             >
               <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="Google" />
