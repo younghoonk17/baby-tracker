@@ -338,6 +338,7 @@ function App() {
     const recommendation = baby && lastWakeTime
       ? getNextSleepRecommendation(new Date(baby.birth_date), new Date(lastWakeTime))
       : null;
+    const authRedirectTo = `${window.location.origin}${import.meta.env.BASE_URL}`;
     const recentActivity = [
       ...sleepLogs
         .filter((log) => log.end_time)
@@ -386,7 +387,12 @@ function App() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 const email = new FormData(e.currentTarget).get('email') as string;
-                const { error } = await supabase.auth.signInWithOtp({ email });
+                const { error } = await supabase.auth.signInWithOtp({
+                  email,
+                  options: {
+                    emailRedirectTo: authRedirectTo,
+                  },
+                });
                 if (error) alert(error.message);
                 else alert('Check your email for the login link!');
               }}
@@ -415,7 +421,7 @@ function App() {
               onClick={() => supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                  redirectTo: `${window.location.origin}${import.meta.env.BASE_URL}`,
+                  redirectTo: authRedirectTo,
                 },
               })}
               className="w-full bg-white border border-gray-200 text-gray-700 py-4 rounded-2xl font-bold hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
@@ -537,6 +543,18 @@ function App() {
                     </div>
                     <br />
                     <button
+                      onClick={() => {
+                        setEditingLog(currentSleepLog);
+                        setEditingLogType('sleep');
+                        setEditStartTime(format(new Date(currentSleepLog.start_time), "yyyy-MM-dd'T'HH:mm:ss"));
+                        setEditEndTime('');
+                      }}
+                      className="mb-4 bg-white/15 text-white px-6 py-2 rounded-xl font-semibold hover:bg-white/25 transition-colors"
+                    >
+                      Edit Start Time
+                    </button>
+                    <br />
+                    <button
                       onClick={toggleSleep}
                       className="bg-white text-indigo-600 px-10 py-4 rounded-2xl font-bold shadow-lg hover:bg-gray-100 transition-transform active:scale-95"
                     >
@@ -568,6 +586,18 @@ function App() {
                     <p className="text-4xl font-mono font-bold tracking-wider mb-6">
                       {formatDuration(currentFeedLog.start_time)}
                     </p>
+                    <button
+                      onClick={() => {
+                        setEditingLog(currentFeedLog);
+                        setEditingLogType('feed');
+                        setEditStartTime(format(new Date(currentFeedLog.start_time), "yyyy-MM-dd'T'HH:mm:ss"));
+                        setEditEndTime('');
+                        setEditBoobSide(currentFeedLog.boob_side === 'right' ? 'right' : 'left');
+                      }}
+                      className="w-full mb-3 bg-white/20 text-white px-6 py-3 rounded-2xl font-semibold hover:bg-white/30 transition-colors"
+                    >
+                      Edit Start Time
+                    </button>
                     <button
                       onClick={stopFeed}
                       className="w-full bg-white text-emerald-700 px-6 py-4 rounded-2xl font-bold shadow-lg hover:bg-emerald-50 transition-transform active:scale-95"
