@@ -199,6 +199,12 @@ create policy baby_members_insert_own on public.baby_members
         and m.user_id = auth.uid()
         and m.role = 'owner'
     )
+    or exists (
+      select 1
+      from public.babies b
+      where b.id = baby_members.baby_id
+        and b.user_id = auth.uid()
+    )
   );
 
 create policy baby_members_update_owner on public.baby_members

@@ -439,12 +439,26 @@ function App() {
               const formData = new FormData(e.currentTarget);
               const name = formData.get('name') as string;
               const birthDate = formData.get('birthDate') as string;
-              const { error } = await supabase.from('babies').insert([{
+              const { data: createdBaby, error } = await supabase.from('babies').insert([{
                 name,
                 birth_date: birthDate,
                 user_id: session.user.id
-              }]);
-              if (!error) fetchBabyAndLogs();
+              }]).select().single();
+
+              if (!error && createdBaby) {
+                const { error: memberError } = await supabase
+                  .from('baby_members')
+                  .upsert(
+                    [{ baby_id: createdBaby.id, user_id: session.user.id, role: 'owner' }],
+                    { onConflict: 'baby_id,user_id' }
+                  );
+
+                if (memberError) {
+                  alert(`Baby created, but membership setup failed: ${memberError.message}`);
+                }
+
+                fetchBabyAndLogs();
+              }
             }}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
